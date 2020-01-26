@@ -1,5 +1,5 @@
 /*
-	sdui_icon.h - v0.1 (2020-01-20) - public domain
+	sdui_icon.h - v0.2 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -43,6 +43,10 @@ extern "C" {
 #include <SDL.h>
 
 void sdui_draw_dropdown_icon_bitmap(int w, int h, size_t stride, uint32_t background_color, uint32_t icon_color, uint32_t* image);
+
+void sdui_draw_minus_icon_bitmap(int w, int h, size_t stride, uint32_t background_color, uint32_t icon_color, uint32_t* image);
+
+void sdui_draw_plus_icon_bitmap(int w, int h, size_t stride, uint32_t background_color, uint32_t icon_color, uint32_t* image);
 
 #ifdef __cplusplus
 }

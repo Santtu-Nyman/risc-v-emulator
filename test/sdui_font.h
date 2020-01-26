@@ -1,5 +1,5 @@
 /*
-	sdui_font.h - v0.1 (2020-01-20) - public domain
+	sdui_font.h - v0.2 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -42,6 +42,8 @@ extern "C" {
 #include <errno.h>
 #include <SDL.h>
 #include "stb_truetype.h"
+
+#define SDUI_MAXIMUM_FONT_GLYPH_LENGTH 0x200
 
 int sdui_load_truetype_font(const char* truetype_file_name, stbtt_fontinfo** font_buffer);
 	

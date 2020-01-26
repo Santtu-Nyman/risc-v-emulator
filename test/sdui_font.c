@@ -1,5 +1,5 @@
 /*
-	sdui_font.c - v0.1 (2020-01-20) - public domain
+	sdui_font.c - v0.2 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -37,8 +37,13 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+#define SDUI_FONT_HEADER_ALIGNMENT 16
+#define SDUI_FONT_HEADER_SIZE ((sizeof(stbtt_fontinfo) + (SDUI_FONT_HEADER_ALIGNMENT - 1)) & ~(SDUI_FONT_HEADER_ALIGNMENT - 1))
+#define SDUI_FONT_GLYPH_BUFFER_SIZE (((SDUI_MAXIMUM_FONT_GLYPH_LENGTH * SDUI_MAXIMUM_FONT_GLYPH_LENGTH) + (SDUI_FONT_HEADER_ALIGNMENT - 1)) & ~(SDUI_FONT_HEADER_ALIGNMENT - 1))
+
 int sdui_load_truetype_font(const char* truetype_file_name, stbtt_fontinfo** font_buffer)
 {
+#ifndef _MSC_VER
 	int error = 0;
 	FILE* handle = fopen(truetype_file_name, "rb");
 	if (!handle)
@@ -46,14 +51,21 @@ int sdui_load_truetype_font(const char* truetype_file_name, stbtt_fontinfo** fon
 		error = errno;
 		return error;
 	}
+#else
+	FILE* handle;
+	int error = fopen_s(&handle, truetype_file_name, "rb");
+	if (error)
+		return error;
+	__assume(handle);
+#endif
 	if (fseek(handle, 0, SEEK_END))
 	{
 		error = ferror(handle);
 		fclose(handle);
 		return error;
 	}
-	size_t size = (size_t)ftell(handle);
-	if (size == (size_t)-1)
+	size_t file_size = (size_t)ftell(handle);
+	if (file_size == (size_t)-1)
 	{
 		error = errno;
 		fclose(handle);
@@ -65,18 +77,17 @@ int sdui_load_truetype_font(const char* truetype_file_name, stbtt_fontinfo** fon
 		fclose(handle);
 		return error;
 	}
-	const size_t font_info_size = ((sizeof(stbtt_fontinfo) + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1));
-	stbtt_fontinfo* buffer = (stbtt_fontinfo*)malloc(font_info_size + ((size + (sizeof(void*) - 1)) & ~(sizeof(void*) - 1)));
-	void* file_buffer = (void*)((uintptr_t)buffer + font_info_size);
+	stbtt_fontinfo* buffer = (stbtt_fontinfo*)malloc(SDUI_FONT_HEADER_SIZE + SDUI_FONT_GLYPH_BUFFER_SIZE + ((file_size + (SDUI_FONT_HEADER_ALIGNMENT - 1)) & ~(SDUI_FONT_HEADER_ALIGNMENT - 1)));
+	void* file_buffer = (void*)((uintptr_t)buffer + SDUI_FONT_HEADER_SIZE + SDUI_FONT_GLYPH_BUFFER_SIZE);
 	if (!buffer)
 	{
 		error = errno;
 		fclose(handle);
 		return error;
 	}
-	for (size_t index = 0; index != size;)
+	for (size_t index = 0; index != file_size;)
 	{
-		size_t read = fread((void*)((uintptr_t)file_buffer + index), 1, size - index, handle);
+		size_t read = fread((void*)((uintptr_t)file_buffer + index), 1, file_size - index, handle);
 		if (!read)
 		{
 			error = ferror(handle);
@@ -189,12 +200,8 @@ int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, 
 	uint32_t color_g = ((color >> 16) & 0xFF);
 	uint32_t color_r = ((color >> 24) & 0xFF);
 
+	uint8_t* glyph_bitmap = (uint8_t*)((uintptr_t)font + SDUI_FONT_HEADER_SIZE);
 	float string_x_offset = x;
-	int glyph_bitmap_width = (int)font_height * 2 + 1;
-	int glyph_bitmap_height = glyph_bitmap_width;
-	uint8_t* glyph_bitmap = (uint8_t*)malloc(glyph_bitmap_width * glyph_bitmap_height);
-	if (!glyph_bitmap)
-		return ENOMEM;
 	int ascent;
 	stbtt_GetFontVMetrics(font, &ascent, 0, 0);
 	float scale = stbtt_ScaleForPixelHeight(font, font_height);
@@ -217,20 +224,8 @@ int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, 
 			stbtt_GetCodepointBitmapBoxSubpixel(font, (int)string[i], scale, scale, x_shift, 0, &left, &bottom, &right, &top);
 			w = right - left;
 			h = top - bottom;
-			if (w > glyph_bitmap_width && h > glyph_bitmap_height)
-			{
-				if (w > glyph_bitmap_width)
-					glyph_bitmap_width = w;
-				if (h > glyph_bitmap_height)
-					glyph_bitmap_height = h;
-				uint8_t* new_glyph_bitmap = (uint8_t*)realloc(glyph_bitmap, glyph_bitmap_width * glyph_bitmap_height);
-				if (!new_glyph_bitmap)
-				{
-					free(glyph_bitmap);
-					return ENOMEM;
-				}
-				glyph_bitmap = new_glyph_bitmap;
-			}
+			if (w > SDUI_MAXIMUM_FONT_GLYPH_LENGTH && h > SDUI_MAXIMUM_FONT_GLYPH_LENGTH)
+				return ENOMEM;
 			stbtt_MakeCodepointBitmapSubpixel(font, glyph_bitmap, w, h, w, scale, scale, x_shift, 0, (int)string[i]);
 			int blit_y = (int)y + bottom + baseline;
 			int blit_y_end = blit_y + h;
@@ -274,7 +269,6 @@ int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, 
 			y += font_height;
 		}
 	}
-	free(glyph_bitmap);
 	return 0;
 }
 
@@ -300,11 +294,7 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 	uint32_t select_color_r = ((select_color >> 24) & 0xFF);
 
 	float string_x_offset = x;
-	int glyph_bitmap_width = (int)font_height * 2 + 1;
-	int glyph_bitmap_height = glyph_bitmap_width;
-	uint8_t* glyph_bitmap = (uint8_t*)malloc(glyph_bitmap_width * glyph_bitmap_height);
-	if (!glyph_bitmap)
-		return ENOMEM;
+	uint8_t* glyph_bitmap = (uint8_t*)((uintptr_t)font + SDUI_FONT_HEADER_SIZE);
 	int ascent;
 	stbtt_GetFontVMetrics(font, &ascent, 0, 0);
 	float scale = stbtt_ScaleForPixelHeight(font, font_height);
@@ -314,6 +304,22 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 	{
 		if (string[i] != (uint32_t)'\n')
 		{
+			uint32_t glyph_b;
+			uint32_t glyph_g;
+			uint32_t glyph_r;
+			if (i >= select_offset && i < select_offset + select_length)
+			{
+				glyph_b = select_color_b;
+				glyph_g = select_color_g;
+				glyph_r = select_color_r;
+			}
+			else
+			{
+				glyph_b = color_b;
+				glyph_g = color_g;
+				glyph_r = color_r;
+			}
+
 			float x_shift = x - floorf(x);
 			int advance;
 			int lsb;
@@ -327,20 +333,8 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 			stbtt_GetCodepointBitmapBoxSubpixel(font, (int)string[i], scale, scale, x_shift, 0, &left, &bottom, &right, &top);
 			w = right - left;
 			h = top - bottom;
-			if (w > glyph_bitmap_width && h > glyph_bitmap_height)
-			{
-				if (w > glyph_bitmap_width)
-					glyph_bitmap_width = w;
-				if (h > glyph_bitmap_height)
-					glyph_bitmap_height = h;
-				uint8_t* new_glyph_bitmap = (uint8_t*)realloc(glyph_bitmap, glyph_bitmap_width * glyph_bitmap_height);
-				if (!new_glyph_bitmap)
-				{
-					free(glyph_bitmap);
-					return ENOMEM;
-				}
-				glyph_bitmap = new_glyph_bitmap;
-			}
+			if (w > SDUI_MAXIMUM_FONT_GLYPH_LENGTH && h > SDUI_MAXIMUM_FONT_GLYPH_LENGTH)
+				return ENOMEM;
 			stbtt_MakeCodepointBitmapSubpixel(font, glyph_bitmap, w, h, w, scale, scale, x_shift, 0, (int)string[i]);
 			int blit_y = (int)y + bottom + baseline;
 			int blit_y_end = blit_y + h;
@@ -365,24 +359,9 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 						int glyph_x = blend_x - blit_x;
 						uint32_t glyph_intensity = (uint32_t)glyph_bitmap[glyph_y * w + glyph_x];
 						uint32_t destination = row[blend_x];
-
-						uint32_t b;
-						uint32_t g;
-						uint32_t r;
-
-						if (i >= select_offset && i < select_offset + select_length)
-						{
-							b = ((((destination >> 8) & 0xFF) * (0xFF - glyph_intensity)) + (select_color_b * glyph_intensity)) / 0xFF;
-							g = ((((destination >> 16) & 0xFF) * (0xFF - glyph_intensity)) + (select_color_g * glyph_intensity)) / 0xFF;
-							r = ((((destination >> 24) & 0xFF) * (0xFF - glyph_intensity)) + (select_color_r * glyph_intensity)) / 0xFF;
-						}
-						else
-						{
-							b = ((((destination >> 8) & 0xFF) * (0xFF - glyph_intensity)) + (color_b * glyph_intensity)) / 0xFF;
-							g = ((((destination >> 16) & 0xFF) * (0xFF - glyph_intensity)) + (color_g * glyph_intensity)) / 0xFF;
-							r = ((((destination >> 24) & 0xFF) * (0xFF - glyph_intensity)) + (color_r * glyph_intensity)) / 0xFF;
-						}
-
+						uint32_t b = ((((destination >> 8) & 0xFF) * (0xFF - glyph_intensity)) + (glyph_b * glyph_intensity)) / 0xFF;
+						uint32_t g = ((((destination >> 16) & 0xFF) * (0xFF - glyph_intensity)) + (glyph_g * glyph_intensity)) / 0xFF;
+						uint32_t r = ((((destination >> 24) & 0xFF) * (0xFF - glyph_intensity)) + (glyph_r * glyph_intensity)) / 0xFF;
 						row[blend_x] = (r << 24) | (g << 16) | (b << 8) | 0xFF;
 					}
 				}
@@ -397,7 +376,6 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 			y += font_height;
 		}
 	}
-	free(glyph_bitmap);
 	return 0;
 }
 

@@ -1,5 +1,5 @@
 /*
-	sdui.h - v0.1 (2020-01-20) - public domain
+	sdui.h - v0.2 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -47,16 +47,38 @@ extern "C" {
 
 #define SDUI_WINDOW_IS_SELECTABLE 0x1
 #define SDUI_WINDOW_IS_VISIBLE 0x2
-#define SDUI_WINDOW_IS_TOP_LEVEL 0x4
-#define SDUI_WINDOW_HAS_BORDER 0x8
-#define SDUI_WINDOW_HAS_TEXT 0x10
-#define SDUI_WINDOW_TEXT_IS_EDITABLE 0x20
-#define SDUI_CENTER_WINDOW_TEXT_HORIZONTALLY 0x40
-#define SDUI_CENTER_WINDOW_TEXT_VERTICALLY 0x80
-#define SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR 0x100
-#define SDUI_WINDOW_IS_DROPDOWN_MENU 0x200
+#define SDUI_WINDOW_IS_HIGHLIGHT 0x4
+#define SDUI_WINDOW_IS_POPUP 0x8
+#define SDUI_WINDOW_HAS_BORDER 0x10
+#define SDUI_WINDOW_HAS_TEXT 0x20
+#define SDUI_WINDOW_TEXT_IS_SELECTABLE 0x40
+#define SDUI_WINDOW_TEXT_IS_EDITABLE 0x80
+#define SDUI_CENTER_WINDOW_TEXT_HORIZONTALLY 0x100
+#define SDUI_CENTER_WINDOW_TEXT_VERTICALLY 0x200
+#define SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR 0x400
+#define SDUI_WINDOW_HAS_RENDER_CALLBACK 0x800
+#define SDUI_WINDOW_IS_DROPDOWN_MENU 0x1000
+
+#define SDUI_WINDOW_TYPE_MAIN (SDUI_WINDOW_IS_VISIBLE)
+#define SDUI_WINDOW_TYPE_TEXT (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_SELECTABLE | SDUI_WINDOW_IS_SELECTABLE | SDUI_WINDOW_IS_VISIBLE)
+#define SDUI_WINDOW_TYPE_TEXT_EDIT (SDUI_WINDOW_TYPE_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE)
+#define SDUI_WINDOW_TYPE_BUTTON (SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR | SDUI_WINDOW_HAS_TEXT | SDUI_CENTER_WINDOW_TEXT_HORIZONTALLY | SDUI_CENTER_WINDOW_TEXT_VERTICALLY | SDUI_WINDOW_IS_SELECTABLE | SDUI_WINDOW_IS_VISIBLE)
+#define SDUI_WINDOW_TYPE_DROPDOWN_MENU (SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR | SDUI_WINDOW_IS_DROPDOWN_MENU | SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_IS_SELECTABLE | SDUI_CENTER_WINDOW_TEXT_VERTICALLY | SDUI_WINDOW_IS_VISIBLE)
 
 #define SDUI_TEXT_ALLOCATION_GRANULARITY 128
+
+#define SDUI_BASE_Z_NORMAL 0x000
+#define SDUI_BASE_Z_POPUP 0x200
+#define SDUI_BASE_Z_HIGHLIGHT 0x400
+#define SDUI_SELECT_Z_INCRMENT 0x100
+#define SDUI_MAXIMUM_Z 0x5FF
+
+#define SDIU_WINDOW_STATE_ITERATED 0x1
+#define SDIU_WINDOW_STATE_UPDATE_TEXTURE 0x2
+#define SDIU_WINDOW_STATE_SINGLE_COLOR 0x4
+#define SDIU_WINDOW_STATE_UNDER_CURSOR 0x8
+#define SDIU_WINDOW_STATE_SELECTED 0x10
+#define SDIU_WINDOW_STATE_SELECT_INCREMENTED 0x20
 
 typedef struct sdui_window_parameters_t
 {
@@ -74,6 +96,8 @@ typedef struct sdui_window_parameters_t
 	uint32_t border_color;
 	uint32_t text_color;
 	char* text;
+	void* user_data;
+	int (*callback)(SDL_Renderer* renderer, uint32_t style_flags, uint32_t state_flags, SDL_Rect* draw_area, void* user_data);
 } sdui_window_parameters_t;
 
 typedef struct sdui_window_t
@@ -85,6 +109,7 @@ typedef struct sdui_window_t
 	size_t text_allocation_length;
 	size_t pointed_item;
 	size_t selected_item;
+	int state_flags;
 	int text_x;
 	int text_y;
 	int z;
@@ -92,9 +117,6 @@ typedef struct sdui_window_t
 	int base_y;
 	int w;
 	int h;
-	int window_is_under_cursor;
-	int window_is_selected;
-	int update_texture;
 	SDL_Texture* texture_handle;
 } sdui_window_t;
 	
@@ -103,15 +125,12 @@ typedef struct sdui_ui_t
 	SDL_Window* window_handle;
 	SDL_Renderer* renderer_handle;
 	SDL_Event event;
-	int select_x;
-	int select_y;
-	int select_w;
-	int select_h;
+	SDL_Rect select;
 	int control_key_active;
-	sdui_window_t* pointed_window;
-	sdui_window_t* selected_window;
-	sdui_window_t* event_window;
-	sdui_window_t* main_window;
+	uint32_t pointed_window_id;
+	uint32_t selected_window_id;
+	uint32_t event_window_id;
+	uint32_t main_window_id;
 	uint32_t frame_timestamp;
 	uint32_t frame_duration;
 	size_t window_count;
@@ -161,7 +180,7 @@ sdui_window_t* sdui_select_window_text(sdui_ui_t* gui, int x, int y, int w, int 
 
 size_t sdui_get_window_item_by_coordinate(sdui_window_t* window, int x, int y);
 
-void sdui_update_windows_z_coordinas(sdui_ui_t* gui);
+int sdui_update_windows_z_coordinas(sdui_ui_t* gui);
 
 void sdui_sort_windows_by_z_coordinate(sdui_ui_t* gui);
 

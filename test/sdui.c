@@ -1,5 +1,5 @@
 /*
-	sdui.h - v0.1 (2020-01-20) - public domain
+	sdui.h - v0.2 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -80,8 +80,6 @@ sdui_window_t* sdui_get_main_window(sdui_ui_t* gui)
 
 int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 {
-
-
 	int w = window->parameters.w;
 	int h = window->parameters.h;
 
@@ -92,7 +90,7 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 		window->w = 0;
 		window->h = 0;
 		window->texture_handle = 0;
-		window->update_texture = 0;
+		window->state_flags &= ~SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 		return 0;
 	}
 
@@ -100,7 +98,7 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 	int border_w = (window->parameters.border_thickness < (w / 2)) ? window->parameters.border_thickness : (w / 2);
 	size_t dropdown_menu_item_count = 0;
 
-	if ((window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && window->parameters.text && window->window_is_selected)
+	if ((window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && window->parameters.text && (window->state_flags & SDIU_WINDOW_STATE_SELECTED))
 	{
 		dropdown_menu_item_count = sdui_get_string_line_count(window->parameters.text);
 		h += (2 * border_h) + ((int)dropdown_menu_item_count * window->parameters.font_size);
@@ -132,8 +130,8 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 			return grow_gui_temporal_buffer_error;
 	}
 
-	uint32_t background_color = ((window->parameters.style_flags & SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR) && !((window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && (window->window_is_selected)) &&
-		(window == gui->pointed_window)) ? window->parameters.pointed_background_color : window->parameters.background_color;
+	uint32_t background_color = ((window->parameters.style_flags & SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR) && !((window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && (window->state_flags & SDIU_WINDOW_STATE_SELECTED)) &&
+		(window->state_flags & SDIU_WINDOW_STATE_UNDER_CURSOR)) ? window->parameters.pointed_background_color : window->parameters.background_color;
 
 	uint32_t* image = (uint32_t*)gui->temporal_buffer;
 
@@ -155,7 +153,7 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 
 	if (window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU)
 	{
-		if (window->window_is_selected)
+		if (window->state_flags & SDIU_WINDOW_STATE_SELECTED)
 		{
 			sdui_fill_rectengle(w - (2 * border_w), window->parameters.h - (2 * border_h), w * sizeof(uint32_t), window->parameters.pointed_background_color, image + ((border_h * w) + border_w));
 			sdui_fill_rectengle(w - (2 * border_w), window->parameters.font_size, w * sizeof(uint32_t), window->parameters.pointed_background_color, image + (((window->parameters.h + (window->pointed_item * window->parameters.font_size)) * w) + border_w));
@@ -168,7 +166,10 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 			menu_icon_size = (window->w - (2 * border_w));
 		int menu_icon_x = window->w - (menu_icon_size + border_w);
 		int menu_icon_y = (window->parameters.h / 2) - (menu_icon_size / 2);
-		sdui_draw_dropdown_icon_bitmap(menu_icon_size, menu_icon_size, w * 4, window->window_is_selected ? window->parameters.pointed_background_color : background_color, window->parameters.text_color, image + ((size_t)menu_icon_y * (size_t)w + (size_t)menu_icon_x));
+
+		//sdui_draw_minus_icon_bitmap(menu_icon_size, menu_icon_size, w * 4, (window->state_flags & SDIU_WINDOW_STATE_SELECTED) ? window->parameters.pointed_background_color : background_color, window->parameters.text_color, image + ((size_t)menu_icon_y * (size_t)w + (size_t)menu_icon_x));
+		//sdui_draw_plus_icon_bitmap(menu_icon_size, menu_icon_size, w * 4, (window->state_flags & SDIU_WINDOW_STATE_SELECTED) ? window->parameters.pointed_background_color : background_color, window->parameters.text_color, image + ((size_t)menu_icon_y * (size_t)w + (size_t)menu_icon_x));
+		sdui_draw_dropdown_icon_bitmap(menu_icon_size, menu_icon_size, w * 4, (window->state_flags & SDIU_WINDOW_STATE_SELECTED) ? window->parameters.pointed_background_color : background_color, window->parameters.text_color, image + ((size_t)menu_icon_y * (size_t)w + (size_t)menu_icon_x));
 	}
 
 	if (window->parameters.text)
@@ -205,14 +206,15 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 
 		//sdui_draw_string(w, h, image, text_offset_x, text_offset_y, gui->test_font.font, window->font_size, display_string_length, window->text + display_string_offset, window->text_color);
 
-		if ((window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && window->window_is_selected)
+		if ((window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && (window->state_flags & SDIU_WINDOW_STATE_SELECTED))
 			sdui_draw_string(w, h, image, window->text_x, window->parameters.h, gui->font, window->parameters.font_size, window->text_length, window->parameters.text, window->parameters.text_color);
 	}
 
+	assert(window->texture_handle);
 	int texture_update_error = SDL_UpdateTexture(window->texture_handle, 0, image, w * 4);
 	assert(!texture_update_error);
 
-	window->update_texture = 0;
+	window->state_flags &= ~SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 	return 0;
 }
 
@@ -241,7 +243,7 @@ int sdui_set_window_text(sdui_ui_t* gui, uint32_t window_id, const char* text)
 
 		window->text_length = text_length;
 		memcpy(window->parameters.text, text, text_length + 1);
-		window->update_texture = 1;
+		window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 	}
 	else
 	{
@@ -253,7 +255,7 @@ int sdui_set_window_text(sdui_ui_t* gui, uint32_t window_id, const char* text)
 
 		window->text_length = text_length;
 		memcpy(window->parameters.text, text, text_length + 1);
-		window->update_texture = 1;
+		window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 	}
 	return 0;
 }
@@ -304,7 +306,7 @@ int sdui_append_window_text(sdui_ui_t* gui, uint32_t window_id, const char* text
 
 		memcpy(window->parameters.text + window->text_length, text, text_length + 1);
 		window->text_length += text_length;
-		window->update_texture = 1;
+		window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 	}
 	else
 	{
@@ -316,7 +318,7 @@ int sdui_append_window_text(sdui_ui_t* gui, uint32_t window_id, const char* text
 
 		window->text_length = text_length;
 		memcpy(window->parameters.text, text, text_length + 1);
-		window->update_texture = 1;
+		window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 	}
 	return 0;
 }
@@ -379,6 +381,7 @@ int sdui_create_gui(const char* title, sdui_ui_t** gui_address, size_t gui_windo
 			return EINVAL;// invalid parent id
 	}
 
+
 	int main_window_h = gui_window_table[main_window_index].h;
 	int main_window_w = gui_window_table[main_window_index].w;
 
@@ -426,18 +429,21 @@ int sdui_create_gui(const char* title, sdui_ui_t** gui_address, size_t gui_windo
 	uint32_t frame_ms_duration = 1000 / frame_per_second;
 
 	gui->window_table = (sdui_window_t*)((uintptr_t)gui + sizeof(sdui_ui_t));
-	gui->select_x = 0;
-	gui->select_y = 0;
+	gui->select.x = 0;
+	gui->select.y = 0;
+	gui->select.w = 0;
+	gui->select.h = 0;
 	gui->control_key_active = 0;
-	gui->pointed_window = 0;
-	gui->selected_window = 0;
-	gui->event_window = gui->window_table + main_window_index;
-	gui->main_window = gui->window_table + main_window_index;
+	gui->pointed_window_id = 0;
+	gui->selected_window_id = 0;
+	gui->event_window_id = gui_window_table[main_window_index].id;
+	gui->main_window_id = gui_window_table[main_window_index].id;
 	gui->frame_timestamp = SDL_GetTicks() - frame_ms_duration;
 	gui->frame_duration = frame_ms_duration;
 	gui->window_count = gui_window_count;
 	gui->temporal_buffer_size = temporal_buffer_initial_size;
 	gui->temporal_buffer = temporal_buffer;
+
 
 	for (size_t i = 0; i != gui_window_count; ++i)
 	{
@@ -462,6 +468,8 @@ int sdui_create_gui(const char* title, sdui_ui_t** gui_address, size_t gui_windo
 		gui->window_table[i].parameters.pointed_background_color = gui_window_table[i].pointed_background_color;
 		gui->window_table[i].parameters.border_color = gui_window_table[i].border_color;
 		gui->window_table[i].parameters.text_color = gui_window_table[i].text_color;
+		gui->window_table[i].parameters.user_data = gui_window_table[i].user_data;
+		gui->window_table[i].parameters.callback = gui_window_table[i].callback;
 
 		if (gui_window_table[i].text)
 		{
@@ -488,15 +496,13 @@ int sdui_create_gui(const char* title, sdui_ui_t** gui_address, size_t gui_windo
 		gui->window_table[i].selected_item = 0;
 		gui->window_table[i].text_x = 0;
 		gui->window_table[i].text_y = 0;
-		gui->window_table[i].z = 0;
+		gui->window_table[i].z = -1;
 		gui->window_table[i].base_x = 0;
 		gui->window_table[i].base_y = 0;
 		gui->window_table[i].w = 0;
 		gui->window_table[i].h = 0;
-		gui->window_table[i].window_is_under_cursor = 0;
-		gui->window_table[i].window_is_selected = 0;
+		gui->window_table[i].state_flags = SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 		gui->window_table[i].texture_handle = 0;
-		gui->window_table[i].update_texture = 1;
 	}
 
 	for (int top_level_set = 1; top_level_set;)
@@ -504,9 +510,9 @@ int sdui_create_gui(const char* title, sdui_ui_t** gui_address, size_t gui_windo
 		top_level_set = 0;
 		for (size_t i = 0; i != gui_window_count; ++i)
 			for (size_t j = 0; j != gui_window_count; ++j)
-				if ((gui->window_table[j].parameters.style_flags & SDUI_WINDOW_IS_TOP_LEVEL) && (gui->window_table[j].parameters.id == gui->window_table[i].parameters.parent_id) && !(gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_TOP_LEVEL))
+				if ((gui->window_table[j].parameters.style_flags & SDUI_WINDOW_IS_POPUP) && (gui->window_table[j].parameters.id == gui->window_table[i].parameters.parent_id) && !(gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_POPUP))
 				{
-					gui->window_table[i].parameters.style_flags |= SDUI_WINDOW_IS_TOP_LEVEL;
+					gui->window_table[i].parameters.style_flags |= SDUI_WINDOW_IS_POPUP;
 					top_level_set = 1;
 				}
 	}
@@ -553,7 +559,7 @@ sdui_window_t* sdui_select_window_text(sdui_ui_t* gui, int x, int y, int w, int 
 		{
 			window->text_selection_offset = offset;
 			window->text_selection_length = length;
-			window->update_texture = 1;
+			window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 		}
 	}
 	return window;
@@ -592,25 +598,39 @@ int sdui_poll_event(sdui_ui_t* gui)
 		{
 			case SDL_MOUSEMOTION:
 			{
-				sdui_window_t* pointed_window = sdui_get_window_by_coordinate(gui, gui->event.motion.x, gui->event.motion.y);
-				if (gui->pointed_window != pointed_window)
+				sdui_window_t* old_pointed_window = gui->pointed_window_id ? sdui_get_window_by_id(gui, gui->pointed_window_id) : 0;
+				sdui_window_t* new_pointed_window = sdui_get_window_by_coordinate(gui, gui->event.motion.x, gui->event.motion.y);
+
+				if (new_pointed_window != old_pointed_window)
 				{
-					if (gui->pointed_window && (gui->pointed_window->parameters.style_flags & SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR))
-						gui->pointed_window->update_texture = 1;
-					if (pointed_window && (pointed_window->parameters.style_flags & SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR))
-						pointed_window->update_texture = 1;
-				}
-				gui->pointed_window = pointed_window;
-				if (gui->pointed_window)
-				{
-					size_t pointed_item = sdui_get_window_item_by_coordinate(gui->pointed_window, gui->event.motion.x, gui->event.motion.y);
-					if (pointed_item != gui->pointed_window->pointed_item)
+					if (old_pointed_window)
 					{
-						gui->pointed_window->pointed_item = pointed_item;
-						gui->pointed_window->update_texture = 1;
+						old_pointed_window->state_flags &= ~SDIU_WINDOW_STATE_UNDER_CURSOR;
+						if (old_pointed_window->parameters.style_flags & SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR)
+							old_pointed_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+					}
+					if (new_pointed_window)
+					{
+						new_pointed_window->state_flags |= SDIU_WINDOW_STATE_UNDER_CURSOR;
+						if (new_pointed_window->parameters.style_flags & SDUI_WINDOW_IS_ACTIVE_UNDER_CURSOR)
+							new_pointed_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 					}
 				}
-				gui->event_window = gui->pointed_window ? gui->pointed_window : gui->main_window;
+
+				if (new_pointed_window)
+				{
+					gui->pointed_window_id = new_pointed_window->parameters.id;
+					size_t pointed_item = sdui_get_window_item_by_coordinate(new_pointed_window, gui->event.motion.x, gui->event.motion.y);
+					if (pointed_item != new_pointed_window->pointed_item)
+					{
+						new_pointed_window->pointed_item = pointed_item;
+						new_pointed_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+					}
+				}
+				else
+					gui->pointed_window_id = 0;
+
+				gui->event_window_id = gui->pointed_window_id ? gui->pointed_window_id : gui->main_window_id;
 				break;
 			}
 			case SDL_MOUSEBUTTONDOWN:
@@ -621,157 +641,154 @@ int sdui_poll_event(sdui_ui_t* gui)
 				}
 				else if (gui->event.button.button == SDL_BUTTON_LEFT)
 				{
-					gui->select_x = gui->event.button.x;
-					gui->select_y = gui->event.button.y;
-					gui->select_w = 0;
-					gui->select_h = 0;
+					gui->select.x = gui->event.button.x;
+					gui->select.y = gui->event.button.y;
+					gui->select.w = 0;
+					gui->select.h = 0;
 
-					sdui_window_t* select_window = sdui_get_window_by_coordinate(gui, gui->event.button.x, gui->event.button.y);
-					if (gui->selected_window && gui->selected_window != select_window)
+					sdui_window_t* old_select_window = gui->selected_window_id ? sdui_get_window_by_id(gui, gui->selected_window_id) : 0;
+					sdui_window_t* new_select_window = sdui_get_window_by_coordinate(gui, gui->event.button.x, gui->event.button.y);
+					if (new_select_window && !(new_select_window->parameters.style_flags & SDUI_WINDOW_IS_SELECTABLE))
+						new_select_window = 0;
+
+					if (new_select_window == old_select_window)
 					{
-						gui->selected_window->window_is_selected = 0;
-						gui->selected_window->update_texture = 1;
-					}
-					if (select_window && (select_window->parameters.style_flags & SDUI_WINDOW_IS_SELECTABLE))
-					{
-						if ((gui->selected_window == select_window) && (select_window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU))
+						if (new_select_window && (new_select_window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU))
 						{
-							gui->selected_window->pointed_item = sdui_get_window_item_by_coordinate(select_window, gui->event.button.x, gui->event.button.y);
-							gui->selected_window->selected_item = gui->selected_window->pointed_item;
-							gui->selected_window->window_is_selected = 0;
-							gui->selected_window->update_texture = 1;
-							gui->selected_window = 0;
-						}
-						else
-						{
-							if (gui->selected_window != select_window)
-							{
-								gui->selected_window = select_window;
-								gui->selected_window->window_is_selected = 1;
-								gui->selected_window->update_texture = 1;
-							}
-							if ((select_window->parameters.style_flags & SDUI_WINDOW_IS_DROPDOWN_MENU) && select_window->parameters.text)
-							{
-								size_t menu_item_count = sdui_get_string_line_count(select_window->parameters.text);
-								if (menu_item_count)
-								{
-									size_t selected_item = sdui_get_window_item_by_coordinate(select_window, gui->event.button.x, gui->event.button.y);
-									if (selected_item != select_window->selected_item)
-									{
-										select_window->selected_item = selected_item;
-										select_window->window_is_selected = 1;
-										select_window->update_texture = 1;
-									}
-								}
-							}
+							new_select_window->pointed_item = sdui_get_window_item_by_coordinate(new_select_window, gui->event.button.x, gui->event.button.y);
+							new_select_window->selected_item = new_select_window->pointed_item;
+							new_select_window->state_flags &= ~SDIU_WINDOW_STATE_SELECTED;
+							new_select_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+							new_select_window = 0;
 						}
 					}
 					else
-						gui->selected_window = 0;
+					{
+						if (old_select_window)
+						{
+							old_select_window->state_flags &= ~SDIU_WINDOW_STATE_SELECTED;
+							old_select_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+						}
+
+						if (new_select_window)
+						{
+							new_select_window->state_flags |= (SDIU_WINDOW_STATE_UPDATE_TEXTURE | SDIU_WINDOW_STATE_SELECTED);
+						}
+					}
+
+					gui->selected_window_id = new_select_window ? new_select_window->parameters.id : 0;
 				}
 
-				gui->event_window = gui->selected_window ? gui->selected_window : gui->main_window;
+				gui->event_window_id = gui->selected_window_id ? gui->selected_window_id : gui->main_window_id;
 				break;
 			}
 			case SDL_MOUSEBUTTONUP:
 			{
-				if (gui->select_x < gui->event.button.x)
-					gui->select_w = gui->event.button.x - gui->select_x;
+				if (gui->select.x < gui->event.button.x)
+					gui->select.w = gui->event.button.x - gui->select.x;
 				else
 				{
-					gui->select_w = gui->select_x - gui->event.button.x;
-					gui->select_x = gui->event.button.x;
+					gui->select.w = gui->select.x - gui->event.button.x;
+					gui->select.x = gui->event.button.x;
 				}
-				if (!gui->select_w)
-					gui->select_w = 1;
+				if (!gui->select.w)
+					gui->select.w = 1;
 
-				if (gui->select_y < gui->event.button.y)
-					gui->select_h = gui->event.button.y - gui->select_y;
+				if (gui->select.y < gui->event.button.y)
+					gui->select.h = gui->event.button.y - gui->select.y;
 				else
 				{
-					gui->select_h = gui->select_y - gui->event.button.y;
-					gui->select_y = gui->event.button.y;
+					gui->select.h = gui->select.y - gui->event.button.y;
+					gui->select.y = gui->event.button.y;
 				}
-				if (!gui->select_h)
-					gui->select_h = 1;
+				if (!gui->select.h)
+					gui->select.h = 1;
 
 
-				sdui_select_window_text(gui, gui->select_x, gui->select_y, gui->select_w, gui->select_h);
+				sdui_select_window_text(gui, gui->select.x, gui->select.y, gui->select.w, gui->select.h);
 
-				gui->event_window = gui->main_window;
+				gui->event_window_id = gui->selected_window_id ? gui->selected_window_id : gui->main_window_id;
 				break;
 			}
 			case SDL_TEXTINPUT:
 			{
-				if (gui->selected_window && gui->selected_window->parameters.text)
+				if (gui->selected_window_id)
 				{
-					size_t append_length = strlen(gui->event.text.text);
-
-					if (gui->selected_window->text_length + append_length + 1 > gui->selected_window->text_allocation_length)
+					sdui_window_t* text_window = sdui_get_window_by_id(gui, gui->selected_window_id);
+					if ((text_window->parameters.style_flags & (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE)) == (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE))
 					{
-						gui->selected_window->text_allocation_length = ((gui->selected_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
-						gui->selected_window->parameters.text = (char*)realloc(gui->selected_window->parameters.text, gui->selected_window->text_allocation_length);
-						assert(gui->selected_window->parameters.text);
-					}
+						size_t append_length = strlen(gui->event.text.text);
 
-					memcpy(gui->selected_window->parameters.text + gui->selected_window->text_length, gui->event.text.text, append_length + 1);
-					gui->selected_window->text_length += append_length;
-					gui->selected_window->update_texture = 1;
+						if (text_window->text_length + append_length + 1 > text_window->text_allocation_length)
+						{
+							text_window->text_allocation_length = ((text_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+							text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+							assert(text_window->parameters.text);
+						}
+
+						memcpy(text_window->parameters.text + text_window->text_length, gui->event.text.text, append_length + 1);
+						text_window->text_length += append_length;
+						text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+					}
 				}
 
-				gui->event_window = gui->selected_window ? gui->selected_window : gui->main_window;
+				gui->event_window_id = gui->selected_window_id ? gui->selected_window_id : gui->main_window_id;
 				break;
 			}
 			case SDL_KEYDOWN:
 			{
-				if (gui->selected_window && gui->selected_window->parameters.text)
+				if (gui->selected_window_id)
 				{
-					if (gui->event.key.keysym.sym == SDLK_BACKSPACE)
+					sdui_window_t* text_window = sdui_get_window_by_id(gui, gui->selected_window_id);
+					if ((text_window->parameters.style_flags & (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE)) == (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE))
 					{
-						if (gui->selected_window->text_length)
+						if (gui->event.key.keysym.sym == SDLK_BACKSPACE)
 						{
-							gui->selected_window->text_length--;
-							gui->selected_window->parameters.text[gui->selected_window->text_length] = 0;
-							gui->selected_window->update_texture = 1;
-						}
-					}
-					else if (gui->event.key.keysym.sym == SDLK_v && gui->control_key_active)
-					{
-						char* clipboard = SDL_GetClipboardText();
-						if (clipboard)
-						{
-							size_t append_length = strlen(clipboard);
-
-							if (gui->selected_window->text_length + append_length + 1 > gui->selected_window->text_allocation_length)
+							if (text_window->text_length)
 							{
-								gui->selected_window->text_allocation_length = ((gui->selected_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
-								gui->selected_window->parameters.text = (char*)realloc(gui->selected_window->parameters.text, gui->selected_window->text_allocation_length);
-								assert(gui->selected_window->parameters.text);
+								text_window->text_length--;
+								text_window->parameters.text[text_window->text_length] = 0;
+								text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 							}
-
-							memcpy(gui->selected_window->parameters.text + gui->selected_window->text_length, clipboard, append_length + 1);
-							gui->selected_window->text_length += append_length;
-							gui->selected_window->update_texture = 1;
-
-							SDL_free(clipboard);
 						}
-					}
-					else if (gui->event.key.keysym.sym == SDLK_c && gui->control_key_active)
-					{
-						SDL_SetClipboardText(gui->selected_window->parameters.text);
-					}
-					else if (gui->event.key.keysym.sym == SDLK_x && gui->control_key_active)
-					{
-						gui->selected_window->text_length = 0;
-						gui->selected_window->parameters.text[0] = 0;
-						gui->selected_window->update_texture = 1;
+						else if (gui->event.key.keysym.sym == SDLK_v && gui->control_key_active)
+						{
+							char* clipboard = SDL_GetClipboardText();
+							if (clipboard)
+							{
+								size_t append_length = strlen(clipboard);
+
+								if (text_window->text_length + append_length + 1 > text_window->text_allocation_length)
+								{
+									text_window->text_allocation_length = ((text_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+									text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+									assert(text_window->parameters.text);
+								}
+
+								memcpy(text_window->parameters.text + text_window->text_length, clipboard, append_length + 1);
+								text_window->text_length += append_length;
+								text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+
+								SDL_free(clipboard);
+							}
+						}
+						else if (gui->event.key.keysym.sym == SDLK_c && gui->control_key_active)
+						{
+							SDL_SetClipboardText(text_window->parameters.text);
+						}
+						else if (gui->event.key.keysym.sym == SDLK_x && gui->control_key_active)
+						{
+							text_window->text_length = 0;
+							text_window->parameters.text[0] = 0;
+							text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+						}
 					}
 				}
 
 				if (gui->event.key.keysym.sym == SDLK_LCTRL)
 					gui->control_key_active = 1;
 
-				gui->event_window = gui->selected_window ? gui->selected_window : gui->main_window;
+				gui->event_window_id = gui->selected_window_id ? gui->selected_window_id : gui->main_window_id;
 				break;
 			}
 			case SDL_KEYUP:
@@ -779,12 +796,12 @@ int sdui_poll_event(sdui_ui_t* gui)
 				if (gui->event.key.keysym.sym == SDLK_LCTRL)
 					gui->control_key_active = 0;
 
-				gui->event_window = gui->selected_window ? gui->selected_window : gui->main_window;
+				gui->event_window_id = gui->selected_window_id ? gui->selected_window_id : gui->main_window_id;
 				break;
 			}
 			default:
 			{
-				gui->event_window = gui->main_window;
+				gui->event_window_id = gui->main_window_id;
 				break;
 			}
 		}
@@ -813,11 +830,77 @@ int sdui_draw_window(sdui_ui_t* gui, sdui_window_t* window)
 	return 0;
 }
 
-void sdui_update_windows_z_coordinas(sdui_ui_t* gui)
+int sdui_update_windows_z_coordinas(sdui_ui_t* gui)
 {
+	assert(gui->temporal_buffer_size >= (gui->window_count * 2 * sizeof(size_t)));// When gui is created temporal_buffer_size needs to be made atleat this big
+	
+	for (size_t i = 0; i != gui->window_count; ++i)
+		gui->window_table[i].state_flags &= ~(SDIU_WINDOW_STATE_ITERATED | SDIU_WINDOW_STATE_SELECT_INCREMENTED);
+
+	sdui_window_t* main_window = sdui_get_window_by_id(gui, gui->main_window_id);
+	main_window->z = (main_window->parameters.style_flags & SDUI_WINDOW_IS_HIGHLIGHT) ? SDUI_BASE_Z_HIGHLIGHT : ((main_window->parameters.style_flags & SDUI_WINDOW_IS_POPUP) ? SDUI_BASE_Z_POPUP : SDUI_BASE_Z_NORMAL);
+	main_window->state_flags |= SDIU_WINDOW_STATE_ITERATED;
+
+	size_t parent_count = 0;
+	size_t* parent_table = (size_t*)gui->temporal_buffer;
+	size_t child_count = 1;
+	size_t* child_table = (size_t*)gui->temporal_buffer + gui->window_count;
+	child_table[0] = ((size_t)((uintptr_t)main_window - (uintptr_t)gui->window_table) / sizeof(sdui_window_t));
+
+	int z_reordered = 0;
+
+	while (child_count)
+	{
+		parent_count = child_count;
+		size_t* table_swap = parent_table;
+		parent_table = child_table;
+		child_table = table_swap;
+		child_count = 0;
+
+		for (size_t i = 0; i != gui->window_count; ++i)
+			if (!(gui->window_table[i].state_flags & SDIU_WINDOW_STATE_ITERATED))
+				for (size_t j = 0; j != parent_count; ++j)
+					if (gui->window_table[parent_table[j]].parameters.id == gui->window_table[i].parameters.parent_id)
+					{
+						int old_z = gui->window_table[i].z;
+
+						gui->window_table[i].z = gui->window_table[parent_table[j]].z + 1;
+
+						if ((gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_HIGHLIGHT) && (gui->window_table[i].z < SDUI_BASE_Z_HIGHLIGHT))
+							gui->window_table[i].z += SDUI_BASE_Z_HIGHLIGHT;
+						else if ((gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_POPUP) && (gui->window_table[i].z < SDUI_BASE_Z_POPUP))
+							gui->window_table[i].z += SDUI_BASE_Z_POPUP;
+
+						gui->window_table[i].state_flags |= (gui->window_table[parent_table[j]].state_flags & SDIU_WINDOW_STATE_SELECT_INCREMENTED) | SDIU_WINDOW_STATE_ITERATED;
+						if ((gui->window_table[i].state_flags & SDIU_WINDOW_STATE_SELECTED) && !(gui->window_table[i].state_flags & SDIU_WINDOW_STATE_SELECT_INCREMENTED))
+						{
+							gui->window_table[i].z += SDUI_SELECT_Z_INCRMENT;
+							gui->window_table[i].state_flags |= SDIU_WINDOW_STATE_SELECT_INCREMENTED;
+						}
+
+						child_table[child_count++] = i;
+
+						if (gui->window_table[i].z != old_z)
+							z_reordered = 1;
+
+						j = parent_count - 1;
+					}
+	}
+
+	return z_reordered;
+
+	/* 
+	// old version does not support window selection
 	for (size_t i = 0; i != gui->window_count; ++i)
 	{
-		int z = (gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_TOP_LEVEL) ? 0x1000 : 0;
+		int z;
+		if (gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_HIGHLIGHT)
+			z = SDUI_BASE_Z_HIGHLIGHT;
+		else if (gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_POPUP)
+			z = SDUI_BASE_Z_POPUP;
+		else
+			z = SDUI_BASE_Z_NORMAL;
+
 		uint32_t parent_id = gui->window_table[i].parameters.parent_id;
 		size_t parent_index = (size_t)~0;
 		do
@@ -833,12 +916,38 @@ void sdui_update_windows_z_coordinas(sdui_ui_t* gui)
 		} while (parent_index != (size_t)~0);
 		gui->window_table[i].z = z;
 	}
+	*/
 }
 
 void sdui_sort_windows_by_z_coordinate(sdui_ui_t* gui)
 {
-	// this sort is slow but, it doas not matter coz gui->window_count is small and this table is probably sorted anyway
+	assert(gui->temporal_buffer_size >= (gui->window_count * sizeof(sdui_window_t)));// When gui is created temporal_buffer_size needs to be made atleat this big
 
+	sdui_window_t* source_table = (sdui_window_t*)gui->temporal_buffer;
+	sdui_window_t* destination_table = gui->window_table;
+
+	sdui_copy(source_table, destination_table, gui->window_count * sizeof(sdui_window_t));
+
+	int count_table[16];
+	int offset_table[16];
+	for (int i = 0; i != 3; ++i)
+	{
+		for (int j = 0; j != 16; ++j)
+			count_table[j] = 0;
+		for (int j = 0; j != gui->window_count; ++j)
+			count_table[(source_table[j].z >> (i * 4)) & 0xF]++;
+		offset_table[0] = 0;
+		for (int j = 1; j != 16; ++j)
+			offset_table[j] = offset_table[j - 1] + count_table[j - 1];
+		for (int j = 0; j != gui->window_count; ++j)
+			destination_table[offset_table[(source_table[j].z >> (i * 4)) & 0xF]++] = source_table[j];
+		sdui_window_t* swap = source_table;
+		source_table = destination_table;
+		destination_table = swap;
+	}
+
+	/*
+	// old verion. i do not like it
 	if (gui->window_count)
 	{
 		sdui_window_t tmp;
@@ -854,6 +963,7 @@ void sdui_sort_windows_by_z_coordinate(sdui_ui_t* gui)
 			else
 				++i;
 	}
+	*/
 }
 
 void sdui_update_windows_parent_x_and_y_coordinas(sdui_ui_t* gui, int base_x, int base_y)
@@ -879,32 +989,42 @@ void sdui_update_windows_parent_x_and_y_coordinas(sdui_ui_t* gui, int base_x, in
 
 int sdui_draw_gui(sdui_ui_t* gui)
 {
-	sdui_update_windows_z_coordinas(gui);
-	sdui_sort_windows_by_z_coordinate(gui);
+	if (sdui_update_windows_z_coordinas(gui))
+		sdui_sort_windows_by_z_coordinate(gui);
 	sdui_update_windows_parent_x_and_y_coordinas(gui, 0, 0);
-	gui->main_window = sdui_get_main_window(gui);
-
+	
 	for (size_t i = 0; i != gui->window_count; ++i)
-		if (gui->window_table[i].update_texture)
+		if (gui->window_table[i].state_flags & SDIU_WINDOW_STATE_UPDATE_TEXTURE)
 			sdui_create_window_texture(gui, gui->window_table + i);
 
-	//sdui_window_t* debug_window_table[96];
-	//for (size_t i = 0; i != 96; ++i)
-	//	debug_window_table[i] = gui->window_table + i;
-
-
+	/*
+	sdui_window_t* debug_window_table[128];
+	for (size_t i = 0; i != 128; ++i)
+		debug_window_table[i] = gui->window_table + i;
+	*/
 
 	SDL_SetRenderDrawColor(gui->renderer_handle, 0, 0, 0, 0xFF);
 	SDL_RenderClear(gui->renderer_handle);
+	SDL_Rect window_area;
 	for (size_t i = 0; i != gui->window_count; ++i)
-		if (gui->window_table + 1 != gui->selected_window)
+	{
+		int error = 0;
+		if (gui->window_table[i].parameters.style_flags & SDUI_WINDOW_IS_VISIBLE)
 		{
-			int error = sdui_draw_window(gui, gui->window_table + i);
+			if (gui->window_table[i].parameters.style_flags & SDUI_WINDOW_HAS_RENDER_CALLBACK)
+			{
+				window_area.x = gui->window_table[i].base_x + gui->window_table[i].parameters.x;
+				window_area.y = gui->window_table[i].base_y + gui->window_table[i].parameters.y;
+				window_area.w = gui->window_table[i].w;
+				window_area.h = gui->window_table[i].h;
+				error = gui->window_table[i].parameters.callback(gui->renderer_handle, gui->window_table[i].parameters.style_flags, gui->window_table[i].state_flags, &window_area, gui->window_table[i].parameters.user_data);
+			}
+			else
+				error = sdui_draw_window(gui, gui->window_table + i);
 			if (error)
 				return error;
 		}
-	if (gui->selected_window)
-		sdui_draw_window(gui, gui->selected_window);
+	}
 	SDL_RenderPresent(gui->renderer_handle);
 
 	return 0;
