@@ -1,5 +1,5 @@
 /*
-	sdui.h - v0.2 (2020-01-26) - public domain
+	sdui.h - v0.3 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -202,7 +202,7 @@ int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window)
 		//	for (int x = text_offset_x + string_rectangle.x; x != text_offset_x + string_rectangle.x + string_rectangle.w; ++x)
 		//		image[y * w + x] = 0xFF00FFFF;
 
-		sdui_draw_string_with_select(w, h, image, window->text_x, window->text_y, gui->font, window->parameters.font_size, display_string_length, window->text_selection_offset, window->text_selection_length, window->parameters.text + display_string_offset, window->parameters.text_color, 0xFF00FFFF);
+		sdui_draw_string_with_select(w, h, image, window->text_x, window->text_y, gui->font, window->parameters.font_size, display_string_length, window->text_selection_offset, window->text_selection_length, window->parameters.text + display_string_offset, window->parameters.text_color, sdui_inverse_color(window->parameters.text_color));
 
 		//sdui_draw_string(w, h, image, text_offset_x, text_offset_y, gui->test_font.font, window->font_size, display_string_length, window->text + display_string_offset, window->text_color);
 
@@ -717,18 +717,46 @@ int sdui_poll_event(sdui_ui_t* gui)
 					sdui_window_t* text_window = sdui_get_window_by_id(gui, gui->selected_window_id);
 					if ((text_window->parameters.style_flags & (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE)) == (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE))
 					{
+						if (text_window->text_selection_offset > text_window->text_length)
+						{
+							text_window->text_selection_offset = 0;
+							text_window->text_selection_length = 0;
+						}
+						else if (text_window->text_selection_offset + text_window->text_selection_length > text_window->text_length)
+							text_window->text_selection_length = text_window->text_length - text_window->text_selection_offset;
+
 						size_t append_length = strlen(gui->event.text.text);
 
-						if (text_window->text_length + append_length + 1 > text_window->text_allocation_length)
+						if (text_window->text_selection_length)
 						{
-							text_window->text_allocation_length = ((text_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
-							text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
-							assert(text_window->parameters.text);
+							size_t first_part_length = text_window->text_selection_offset;
+							size_t second_part_length = text_window->text_length - (text_window->text_selection_offset + text_window->text_selection_length);
+							if (first_part_length + append_length + second_part_length + 1 > text_window->text_allocation_length)
+							{
+								text_window->text_allocation_length = ((first_part_length + append_length + second_part_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+								text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+								assert(text_window->parameters.text);
+							}
+							memmove(text_window->parameters.text + first_part_length + append_length, text_window->parameters.text + text_window->text_selection_offset + text_window->text_selection_length, second_part_length);
+							memcpy(text_window->parameters.text + first_part_length, gui->event.text.text, append_length);
+							text_window->parameters.text[first_part_length + append_length + second_part_length] = 0;
+							text_window->text_selection_offset = 0;
+							text_window->text_selection_length = 0;
+							text_window->text_length = first_part_length + append_length + second_part_length;
+							text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 						}
-
-						memcpy(text_window->parameters.text + text_window->text_length, gui->event.text.text, append_length + 1);
-						text_window->text_length += append_length;
-						text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+						else
+						{
+							if (text_window->text_length + append_length + 1 > text_window->text_allocation_length)
+							{
+								text_window->text_allocation_length = ((text_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+								text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+								assert(text_window->parameters.text);
+							}
+							memcpy(text_window->parameters.text + text_window->text_length, gui->event.text.text, append_length + 1);
+							text_window->text_length += append_length;
+							text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+						}
 					}
 				}
 
@@ -742,13 +770,41 @@ int sdui_poll_event(sdui_ui_t* gui)
 					sdui_window_t* text_window = sdui_get_window_by_id(gui, gui->selected_window_id);
 					if ((text_window->parameters.style_flags & (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE)) == (SDUI_WINDOW_HAS_TEXT | SDUI_WINDOW_TEXT_IS_EDITABLE))
 					{
+						if (text_window->text_selection_offset > text_window->text_length)
+						{
+							text_window->text_selection_offset = 0;
+							text_window->text_selection_length = 0;
+						}
+						else if (text_window->text_selection_offset + text_window->text_selection_length > text_window->text_length)
+							text_window->text_selection_length = text_window->text_length - text_window->text_selection_offset;
+
 						if (gui->event.key.keysym.sym == SDLK_BACKSPACE)
 						{
 							if (text_window->text_length)
 							{
-								text_window->text_length--;
-								text_window->parameters.text[text_window->text_length] = 0;
-								text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+								if (text_window->text_selection_length)
+								{
+									size_t first_part_length = text_window->text_selection_offset;
+									size_t second_part_length = text_window->text_length - (text_window->text_selection_offset + text_window->text_selection_length);
+									if (first_part_length + second_part_length + 1 > text_window->text_allocation_length)
+									{
+										text_window->text_allocation_length = ((first_part_length + second_part_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+										text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+										assert(text_window->parameters.text);
+									}
+									memmove(text_window->parameters.text + first_part_length, text_window->parameters.text + text_window->text_selection_offset + text_window->text_selection_length, second_part_length);
+									text_window->parameters.text[first_part_length + second_part_length] = 0;
+									text_window->text_selection_offset = 0;
+									text_window->text_selection_length = 0;
+									text_window->text_length = first_part_length + second_part_length;
+									text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+								}
+								else
+								{
+									text_window->text_length--;
+									text_window->parameters.text[text_window->text_length] = 0;
+									text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+								}
 							}
 						}
 						else if (gui->event.key.keysym.sym == SDLK_v && gui->control_key_active)
@@ -758,29 +814,78 @@ int sdui_poll_event(sdui_ui_t* gui)
 							{
 								size_t append_length = strlen(clipboard);
 
-								if (text_window->text_length + append_length + 1 > text_window->text_allocation_length)
+								if (text_window->text_selection_length)
 								{
-									text_window->text_allocation_length = ((text_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
-									text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
-									assert(text_window->parameters.text);
+									size_t first_part_length = text_window->text_selection_offset;
+									size_t second_part_length = text_window->text_length - (text_window->text_selection_offset + text_window->text_selection_length);
+									if (first_part_length + append_length + second_part_length + 1 > text_window->text_allocation_length)
+									{
+										text_window->text_allocation_length = ((first_part_length + append_length + second_part_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+										text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+										assert(text_window->parameters.text);
+									}
+									memmove(text_window->parameters.text + first_part_length + append_length, text_window->parameters.text + text_window->text_selection_offset + text_window->text_selection_length, second_part_length);
+									memcpy(text_window->parameters.text + first_part_length, clipboard, append_length);
+									text_window->parameters.text[first_part_length + append_length + second_part_length] = 0;
+									text_window->text_selection_offset = 0;
+									text_window->text_selection_length = 0;
+									text_window->text_length = first_part_length + append_length + second_part_length;
+									text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
 								}
+								else
+								{
+									if (text_window->text_length + append_length + 1 > text_window->text_allocation_length)
+									{
+										text_window->text_allocation_length = ((text_window->text_length + append_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+										text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+										assert(text_window->parameters.text);
+									}
 
-								memcpy(text_window->parameters.text + text_window->text_length, clipboard, append_length + 1);
-								text_window->text_length += append_length;
-								text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+									memcpy(text_window->parameters.text + text_window->text_length, clipboard, append_length + 1);
+									text_window->text_length += append_length;
+									text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+								}
 
 								SDL_free(clipboard);
 							}
 						}
 						else if (gui->event.key.keysym.sym == SDLK_c && gui->control_key_active)
 						{
-							SDL_SetClipboardText(text_window->parameters.text);
+							if (text_window->text_selection_length)
+							{
+								char cut_character = text_window->parameters.text[text_window->text_selection_offset + text_window->text_selection_length];
+								text_window->parameters.text[text_window->text_selection_offset + text_window->text_selection_length] = 0;
+								SDL_SetClipboardText(text_window->parameters.text + text_window->text_selection_offset);
+								text_window->parameters.text[text_window->text_selection_offset + text_window->text_selection_length] = cut_character;
+							}
+							else
+								SDL_SetClipboardText(text_window->parameters.text);
 						}
 						else if (gui->event.key.keysym.sym == SDLK_x && gui->control_key_active)
 						{
-							text_window->text_length = 0;
-							text_window->parameters.text[0] = 0;
-							text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+							if (text_window->text_selection_length)
+							{
+								size_t first_part_length = text_window->text_selection_offset;
+								size_t second_part_length = text_window->text_length - (text_window->text_selection_offset + text_window->text_selection_length);
+								if (first_part_length + second_part_length + 1 > text_window->text_allocation_length)
+								{
+									text_window->text_allocation_length = ((first_part_length + second_part_length + 1) + (SDUI_TEXT_ALLOCATION_GRANULARITY - 1)) & (size_t)~(SDUI_TEXT_ALLOCATION_GRANULARITY - 1);
+									text_window->parameters.text = (char*)realloc(text_window->parameters.text, text_window->text_allocation_length);
+									assert(text_window->parameters.text);
+								}
+								memmove(text_window->parameters.text + first_part_length, text_window->parameters.text + text_window->text_selection_offset + text_window->text_selection_length, second_part_length);
+								text_window->parameters.text[first_part_length + second_part_length] = 0;
+								text_window->text_selection_offset = 0;
+								text_window->text_selection_length = 0;
+								text_window->text_length = first_part_length + second_part_length;
+								text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+							}
+							else
+							{
+								text_window->text_length = 0;
+								text_window->parameters.text[0] = 0;
+								text_window->state_flags |= SDIU_WINDOW_STATE_UPDATE_TEXTURE;
+							}
 						}
 					}
 				}
@@ -1028,4 +1133,27 @@ int sdui_draw_gui(sdui_ui_t* gui)
 	SDL_RenderPresent(gui->renderer_handle);
 
 	return 0;
+}
+
+void sdui_move_window(sdui_ui_t* gui, uint32_t window_id, int x, int y, int w, int h)
+{
+	sdui_window_t* window = sdui_get_window_by_id(gui, window_id);
+	if (window)
+	{
+		window->parameters.x = x;
+		window->parameters.y = y;
+		int update_texture = 0;
+		if (w > -1)
+		{
+			window->parameters.w = w;
+			update_texture = 1;
+		}
+		if (h > -1)
+		{
+			window->parameters.h = h;
+			update_texture = 1;
+		}
+		if (update_texture)
+			window->texture_handle = 1;
+	}
 }

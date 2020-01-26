@@ -1,5 +1,5 @@
 /*
-	sdui.h - v0.2 (2020-01-26) - public domain
+	sdui.h - v0.3 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -185,6 +185,8 @@ int sdui_update_windows_z_coordinas(sdui_ui_t* gui);
 void sdui_sort_windows_by_z_coordinate(sdui_ui_t* gui);
 
 void sdui_update_windows_parent_x_and_y_coordinas(sdui_ui_t* gui, int base_x, int base_y);
+
+void sdui_move_window(sdui_ui_t* gui, uint32_t window_id, int x, int y, int w, int h);
 
 #ifdef __cplusplus
 }

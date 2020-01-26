@@ -1,5 +1,5 @@
 /*
-	sdui_icon.c - v0.2 (2020-01-26) - public domain
+	sdui_icon.c - v0.3 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.

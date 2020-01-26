@@ -1,5 +1,5 @@
 /*
-	sdui_base.c - v0.2 (2020-01-26) - public domain
+	sdui_base.c - v0.3 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -152,4 +152,13 @@ size_t sdui_print_signed(int32_t value, char* buffer)
 	if (is_negative)
 		*buffer = '-';
 	return (size_t)is_negative + sdui_print_unsigned((uint32_t)(is_negative ? -value : value), buffer + is_negative);// max size is 11
+}
+
+uint32_t sdui_inverse_color(uint32_t color)
+{
+	uint32_t a = ((color >> 0) & 0xFF);
+	uint32_t b = 0xFF - ((color >> 8) & 0xFF);
+	uint32_t g = 0xFF - ((color >> 16) & 0xFF);
+	uint32_t r = 0xFF - ((color >> 24) & 0xFF);
+	return (a << 0) | (b << 8) | (g << 16) | (r << 24);
 }
