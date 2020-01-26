@@ -1,5 +1,5 @@
 /*
-	sdui.h - v0.3 (2020-01-26) - public domain
+	sdui.h - v0.3.1 (2020-01-26) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -1140,8 +1140,10 @@ void sdui_move_window(sdui_ui_t* gui, uint32_t window_id, int x, int y, int w, i
 	sdui_window_t* window = sdui_get_window_by_id(gui, window_id);
 	if (window)
 	{
-		window->parameters.x = x;
-		window->parameters.y = y;
+		if (x > -1)
+			window->parameters.x = x;
+		if (y > -1)
+			window->parameters.y = y;
 		int update_texture = 0;
 		if (w > -1)
 		{
