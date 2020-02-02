@@ -1,5 +1,5 @@
 /*
-	sdui_font.h - v0.3 (2020-01-26) - public domain
+	sdui_font.h - v0.4.0 (2020-02-02) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -47,13 +47,13 @@ extern "C" {
 
 int sdui_load_truetype_font(const char* truetype_file_name, stbtt_fontinfo** font_buffer);
 	
-int sdui_calculate_string_rectangle(stbtt_fontinfo* font, float font_height, size_t string_length, const char* string, SDL_Rect* string_rectangle);
+int sdui_calculate_string_rectangle(stbtt_fontinfo* font, float font_height, size_t string_length, const uint32_t* string, SDL_Rect* string_rectangle);
 	
-int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, const char* string, uint32_t color);
+int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, const uint32_t* string, uint32_t color);
 	
-int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, size_t select_offset, size_t select_length, const char* string, uint32_t color, uint32_t select_color);
+int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, size_t select_offset, size_t select_length, const uint32_t* string, uint32_t color, uint32_t select_color);
 
-int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t string_length, const char* string, const SDL_Rect* select, size_t* select_offset, size_t* select_length);
+int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t string_length, const uint32_t* string, const SDL_Rect* select, size_t* select_offset, size_t* select_length);
 
 #ifdef __cplusplus
 }

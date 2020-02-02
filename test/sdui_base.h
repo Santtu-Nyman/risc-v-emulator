@@ -1,5 +1,5 @@
 /*
-	sdui_base.h - v0.3 (2020-01-26) - public domain
+	sdui_base.h - v0.4.0 (2020-02-02) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -67,6 +67,12 @@ void sdui_fill_rectengle(int w, int h, size_t stride, uint32_t color, uint32_t* 
 int sdui_are_rectengle_overlapped(const SDL_Rect* a, const SDL_Rect* b);
 
 uint32_t sdui_inverse_color(uint32_t color);
+
+size_t sdui_unicode_length(const uint32_t* string);
+
+size_t sdui_get_unicode_line_offset(const uint32_t* string, size_t selected_item);
+
+size_t sdui_unicode_line_size(const uint32_t* string);
 
 #ifdef __cplusplus
 }

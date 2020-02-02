@@ -1,5 +1,5 @@
 /*
-	sdui_base.c - v0.3 (2020-01-26) - public domain
+	sdui_base.c - v0.4.0 (2020-02-02) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -161,4 +161,33 @@ uint32_t sdui_inverse_color(uint32_t color)
 	uint32_t g = 0xFF - ((color >> 16) & 0xFF);
 	uint32_t r = 0xFF - ((color >> 24) & 0xFF);
 	return (a << 0) | (b << 8) | (g << 16) | (r << 24);
+}
+
+size_t sdui_unicode_length(const uint32_t* string)
+{
+	const uint32_t* read_string = string;
+	while (*read_string)
+		++read_string;
+	return (size_t)((uintptr_t)read_string - (uintptr_t)string) / sizeof(uint32_t);
+}
+
+size_t sdui_get_unicode_line_offset(const uint32_t* string, size_t line_number)
+{
+	const uint32_t* read_string = string;
+	for (size_t line_index = 0; line_index != line_number; ++line_index)
+	{
+		read_string += sdui_unicode_line_size(read_string);
+		if (!*read_string)
+			return (size_t)~0;
+		++read_string;
+	}
+	return (size_t)((uintptr_t)read_string - (uintptr_t)string) / sizeof(uint32_t);
+}
+
+size_t sdui_unicode_line_size(const uint32_t* string)
+{
+	const uint32_t* read_string = string;
+	while (*read_string && *read_string != (uint32_t)'\n' && *read_string != (uint32_t)'\r')
+		++read_string;
+	return (size_t)((uintptr_t)read_string - (uintptr_t)string) / sizeof(uint32_t);
 }

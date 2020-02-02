@@ -1,5 +1,5 @@
 /*
-	sdui.h - v0.3 (2020-01-26) - public domain
+	sdui.h - v0.4.0 (2020-02-02) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -43,6 +43,7 @@ extern "C" {
 #include <SDL.h>
 #include "sdui_base.h"
 #include "sdui_icon.h"
+#include "sdui_utf8.h"
 #include "sdui_font.h"
 
 #define SDUI_WINDOW_IS_SELECTABLE 0x1
@@ -67,7 +68,8 @@ extern "C" {
 
 #define SDUI_TEXT_ALLOCATION_GRANULARITY 128
 
-#define SDUI_BASE_Z_NORMAL 0x000
+#define SDUI_BASE_Z_HIDDEN 0x000
+#define SDUI_BASE_Z_NORMAL 0x001
 #define SDUI_BASE_Z_POPUP 0x200
 #define SDUI_BASE_Z_HIGHLIGHT 0x400
 #define SDUI_SELECT_Z_INCRMENT 0x100
@@ -79,6 +81,7 @@ extern "C" {
 #define SDIU_WINDOW_STATE_UNDER_CURSOR 0x8
 #define SDIU_WINDOW_STATE_SELECTED 0x10
 #define SDIU_WINDOW_STATE_SELECT_INCREMENTED 0x20
+#define SDIU_WINDOW_STATE_HIDDEN 0x40
 
 typedef struct sdui_window_parameters_t
 {
@@ -95,7 +98,7 @@ typedef struct sdui_window_parameters_t
 	uint32_t pointed_background_color;
 	uint32_t border_color;
 	uint32_t text_color;
-	char* text;
+	const char* create_text;
 	void* user_data;
 	int (*callback)(SDL_Renderer* renderer, uint32_t style_flags, uint32_t state_flags, SDL_Rect* draw_area, void* user_data);
 } sdui_window_parameters_t;
@@ -103,6 +106,7 @@ typedef struct sdui_window_parameters_t
 typedef struct sdui_window_t
 {
 	sdui_window_parameters_t parameters;
+	uint32_t* text;
 	size_t text_length;
 	size_t text_selection_offset;
 	size_t text_selection_length;
@@ -133,6 +137,7 @@ typedef struct sdui_ui_t
 	uint32_t main_window_id;
 	uint32_t frame_timestamp;
 	uint32_t frame_duration;
+	uint32_t sdl2_window_id;
 	size_t window_count;
 	sdui_window_t* window_table;
 	size_t temporal_buffer_size;
@@ -152,13 +157,17 @@ int sdui_draw_gui(sdui_ui_t* gui);
 
 int sdui_grow_gui_temporal_buffer(sdui_ui_t* gui, size_t required_size);
 
-sdui_window_t* sdui_get_window_by_id(sdui_ui_t* gui, uint32_t window_id);
+sdui_window_t* sdui_get_window_address(sdui_ui_t* gui, uint32_t window_id);
 
 sdui_window_t* sdui_get_window_by_coordinate(sdui_ui_t* gui, int x, int y);
 
 sdui_window_t* sdui_get_main_window(sdui_ui_t* gui);
 
 int sdui_create_window_texture(sdui_ui_t* gui, sdui_window_t* window);
+
+int sdui_set_window_unicode_text_by_address(sdui_ui_t* gui, sdui_window_t* window, const uint32_t* text);
+
+int sdui_set_window_unicode_text(sdui_ui_t* gui, uint32_t window_id, const uint32_t* text);
 
 int sdui_set_window_text(sdui_ui_t* gui, uint32_t window_id, const char* text);
 
@@ -168,6 +177,10 @@ int sdui_set_window_text_with_unsigned_number(sdui_ui_t* gui, uint32_t window_id
 
 int sdui_set_window_text_with_hexadecimal_number(sdui_ui_t* gui, uint32_t window_id, uint32_t value);
 
+int sdui_append_window_unicode_text_by_address(sdui_ui_t* gui, sdui_window_t* window, const uint32_t* text);
+
+int sdui_append_window_unicode_text(sdui_ui_t* gui, uint32_t window_id, const uint32_t* text);
+
 int sdui_append_window_text(sdui_ui_t* gui, uint32_t window_id, const char* text);
 
 int sdui_append_window_text_with_signed_number(sdui_ui_t* gui, uint32_t window_id, int32_t value);
@@ -175,6 +188,14 @@ int sdui_append_window_text_with_signed_number(sdui_ui_t* gui, uint32_t window_i
 int sdui_append_window_text_with_unsigned_number(sdui_ui_t* gui, uint32_t window_id, uint32_t value);
 
 int sdui_append_window_text_with_hexadecimal_number(sdui_ui_t* gui, uint32_t window_id, uint32_t value);
+
+int sdui_replace_window_text_by_address(sdui_ui_t* gui, sdui_window_t* window, size_t offset, size_t old_text_length, const uint32_t* new_text);
+
+int sdui_get_window_text_by_address(sdui_ui_t* gui, sdui_window_t* window, size_t buffer_size, char* buffer, size_t* text_length);
+
+int sdui_get_window_text(sdui_ui_t* gui, uint32_t window_id, size_t buffer_size, char* buffer, size_t* text_length);
+
+size_t sdui_calculate_menu_item_count(const uint32_t* menu_string);
 
 sdui_window_t* sdui_select_window_text(sdui_ui_t* gui, int x, int y, int w, int h);
 
@@ -185,6 +206,8 @@ int sdui_update_windows_z_coordinas(sdui_ui_t* gui);
 void sdui_sort_windows_by_z_coordinate(sdui_ui_t* gui);
 
 void sdui_update_windows_parent_x_and_y_coordinas(sdui_ui_t* gui, int base_x, int base_y);
+
+void sdui_move_window_by_address(sdui_ui_t* gui, sdui_window_t* window, int x, int y, int w, int h);
 
 void sdui_move_window(sdui_ui_t* gui, uint32_t window_id, int x, int y, int w, int h);
 

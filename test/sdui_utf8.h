@@ -1,5 +1,5 @@
 /*
-	sdui_icon.h - v0.4.0 (2020-02-02) - public domain
+	sdui_utf8.h - v0.4.0 (2020-02-02) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -30,8 +30,8 @@
 	------------------------------------------------------------------------------
 */
 
-#ifndef SDUI_ICON_H
-#define SDUI_ICON_H
+#ifndef SDUI_UTF8_H
+#define SDUI_UTF8_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,16 +40,13 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 #include <errno.h>
-#include <SDL.h>
 
-void sdui_draw_dropdown_icon_bitmap(int w, int h, size_t stride, uint32_t background_color, uint32_t icon_color, uint32_t* image);
+int sdui_utf8_to_unicode(size_t utf8_string_size, const char* utf8_string, size_t unicode_buffer_length, size_t* unicode_character_count, uint32_t* unicode_buffer);
 
-void sdui_draw_minus_icon_bitmap(int w, int h, size_t stride, uint32_t background_color, uint32_t icon_color, uint32_t* image);
-
-void sdui_draw_plus_icon_bitmap(int w, int h, size_t stride, uint32_t background_color, uint32_t icon_color, uint32_t* image);
+int sdui_unicode_to_utf8(size_t unicode_string_size, const uint32_t* unicode_string, size_t utf8_buffer_length, size_t* utf8_byte_count, char* utf8_buffer);
 
 #ifdef __cplusplus
 }
 #endif // __cplusplus
 
-#endif // SDUI_ICON_H
+#endif // SDUI_UTF8_H

@@ -1,5 +1,5 @@
 /*
-	sdui_font.c - v0.3 (2020-01-26) - public domain
+	sdui_font.c - v0.4.0 (2020-02-02) - public domain
 	Authored from 2020 by Santtu Nyman
 
 	This file is part of my RISC-V emulator project.
@@ -110,7 +110,7 @@ int sdui_load_truetype_font(const char* truetype_file_name, stbtt_fontinfo** fon
 	return 0;
 }
 
-int sdui_calculate_string_rectangle(stbtt_fontinfo* font, float font_height, size_t string_length, const char* string, SDL_Rect* string_rectangle)
+int sdui_calculate_string_rectangle(stbtt_fontinfo* font, float font_height, size_t string_length, const uint32_t* string, SDL_Rect* string_rectangle)
 {
 	if (!string_length)
 	{
@@ -191,7 +191,7 @@ int sdui_calculate_string_rectangle(stbtt_fontinfo* font, float font_height, siz
 	return 0;
 }
 
-int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, const char* string, uint32_t color)
+int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, const uint32_t* string, uint32_t color)
 {
 	if (width < 1 || height < 1 || font_height < 0.0f)
 		return EINVAL;
@@ -272,7 +272,7 @@ int sdui_draw_string(int width, int height, uint32_t* pixels, float x, float y, 
 	return 0;
 }
 
-int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, size_t select_offset, size_t select_length, const char* string, uint32_t color, uint32_t select_color)
+int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float x, float y, stbtt_fontinfo* font, float font_height, size_t string_length, size_t select_offset, size_t select_length, const uint32_t* string, uint32_t color, uint32_t select_color)
 {
 	if (width < 1 || height < 1 || font_height < 0.0f)
 		return EINVAL;
@@ -294,12 +294,70 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 	uint32_t select_color_r = ((select_color >> 24) & 0xFF);
 
 	float string_x_offset = x;
-	uint8_t* glyph_bitmap = (uint8_t*)((uintptr_t)font + SDUI_FONT_HEADER_SIZE);
+	float string_y_offset = y;
 	int ascent;
 	stbtt_GetFontVMetrics(font, &ascent, 0, 0);
 	float scale = stbtt_ScaleForPixelHeight(font, font_height);
 	int baseline = (int)(scale * (float)ascent);
 
+
+	for (size_t i = 0; i != string_length; ++i)
+	{
+		if (string[i] != (uint32_t)'\n')
+		{
+			float x_shift = x - floorf(x);
+			int advance;
+			int lsb;
+			int left;
+			int right;
+			int bottom;
+			int top;
+			stbtt_GetCodepointHMetrics(font, (int)string[i], &advance, &lsb);
+			float fp_w = (scale * (float)advance) + ((i + 1 != string_length) ? (scale * (float)stbtt_GetCodepointKernAdvance(font, (int)string[i], (int)string[i + 1])) : 0);
+			if ((i >= select_offset) && (i < select_offset + select_length))
+			{
+				int fill_x = (int)x;
+				int fill_y = (int)y;
+				int fill_w = (int)fp_w ? (int)fp_w + 1 : 0;
+				int fill_h = (int)font_height;
+				if (fill_x < 0)
+				{
+					fill_w += fill_x;
+					fill_x = 0;
+				}
+				if (fill_w < 0)
+					fill_w = 0;
+				else if (fill_x + fill_w > width)
+					fill_w = width - fill_x;
+				if (fill_y < 0)
+				{
+					fill_h += fill_y;
+					fill_y = 0;
+				}
+				if (fill_h < 0)
+					fill_h = 0;
+				else if (fill_y + fill_h > height)
+					fill_h = height - fill_y;
+				for (int fill_yl = fill_y, fill_yh = fill_y + fill_h; fill_yl != fill_yh; ++fill_yl)
+				{
+					uint32_t* fill_row = (uint32_t*)((uintptr_t)pixels + (size_t)fill_yl * ((size_t)width * 4));
+					for (int fill_xl = fill_x, fill_xh = fill_x + fill_w; fill_xl != fill_xh; ++fill_xl)
+						fill_row[fill_xl] = color;
+				}
+			}
+			x += fp_w;
+		}
+		else
+		{
+			x = string_x_offset;
+			y += font_height;
+		}
+	}
+
+
+	uint8_t* glyph_bitmap = (uint8_t*)((uintptr_t)font + SDUI_FONT_HEADER_SIZE);
+	x = string_x_offset;
+	y = string_y_offset;
 	for (size_t i = 0; i != string_length; ++i)
 	{
 		if (string[i] != (uint32_t)'\n')
@@ -307,7 +365,7 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 			uint32_t glyph_b;
 			uint32_t glyph_g;
 			uint32_t glyph_r;
-			if (i >= select_offset && i < select_offset + select_length)
+			if ((i >= select_offset) && (i < select_offset + select_length))
 			{
 				glyph_b = select_color_b;
 				glyph_g = select_color_g;
@@ -355,7 +413,6 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 					uint32_t* row = (uint32_t*)((uintptr_t)pixels + (size_t)blend_y * ((size_t)width * 4));
 					for (int blend_x = bounding_x; blend_x != bounding_x_end; ++blend_x)
 					{
-						/* RRGGBBAA */
 						int glyph_x = blend_x - blit_x;
 						uint32_t glyph_intensity = (uint32_t)glyph_bitmap[glyph_y * w + glyph_x];
 						uint32_t destination = row[blend_x];
@@ -379,11 +436,11 @@ int sdui_draw_string_with_select(int width, int height, uint32_t* pixels, float 
 	return 0;
 }
 
-int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t string_length, const char* string, const SDL_Rect* select, size_t* select_offset, size_t* select_length)
+int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t string_length, const uint32_t* string, const SDL_Rect* select, size_t* select_offset, size_t* select_length)
 {
 	if (!string_length)
 	{
-		*select_offset = 0;
+		*select_offset = (size_t)~0;
 		*select_length = 0;
 		return 0;
 	}
@@ -412,14 +469,29 @@ int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t stri
 			int lsb;
 			int left;
 			stbtt_GetCodepointHMetrics(font, (int)string[i], &advance, &lsb);
+
+			float fp_w = (scale * (float)advance) + ((i + 1 != string_length) ? (scale * (float)stbtt_GetCodepointKernAdvance(font, (int)string[i], (int)string[i + 1])) : 0);
+			SDL_Rect fill = { (int)draw_x, (int)draw_y, (int)fp_w ? (int)fp_w + 1 : 0, (int)font_height };
+			if (sdui_are_rectengle_overlapped(select, &fill))
+			{
+				if (offset != (size_t)~0)
+				{
+					if (offset + length - 1 < i)
+						length = i - offset + 1;
+				}
+				else
+				{
+					offset = i;
+					length = 1;
+				}
+			}
+			draw_x += fp_w;
+
+			/*
 			int right;
 			int bottom;
 			int top;
 			stbtt_GetCodepointBitmapBoxSubpixel(font, (int)string[i], scale, scale, x_shift, 0, &left, &bottom, &right, &top);
-			//int blit_x = (int)draw_x + left;
-			//int blit_y = (int)draw_y + bottom + baseline;
-			//int blit_w = right - left;
-			//int blit_h = top - bottom;
 			SDL_Rect blit = { (int)draw_x + left, (int)draw_y + bottom + baseline, right - left, top - bottom };
 
 			if (sdui_are_rectengle_overlapped(select, &blit))
@@ -439,6 +511,7 @@ int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t stri
 			draw_x += (scale * (float)advance);
 			if (i + 1 != string_length)
 				draw_x += scale * (float)stbtt_GetCodepointKernAdvance(font, (int)string[i], (int)string[i + 1]);
+			*/
 		}
 		else
 		{
@@ -449,7 +522,7 @@ int sdui_select_from_string(stbtt_fontinfo* font, float font_height, size_t stri
 
 	if (offset == (size_t)~0)
 	{
-		*select_offset = 0;
+		*select_offset = (size_t)~0;
 		*select_length = 0;
 	}
 	else
